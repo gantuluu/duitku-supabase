@@ -27,6 +27,8 @@ Create payment-intent rows from a trusted backend. The migration intentionally c
 - Keep callback logs for investigation.
 - Never use browser redirects or JavaScript callbacks to mark an order as paid.
 - Preserve paid as a terminal state; do not downgrade it on later callbacks.
+- Apply the payment and parent-order status changes through the `apply_duitku_callback_status` database function. It locks the payment row and commits both changes in one transaction.
+- The callback RPC is executable only by `service_role`; it uses `SECURITY INVOKER` and a fixed empty search path.
 - Keep callback URL publicly reachable over HTTPS.
 
 ## Environment
