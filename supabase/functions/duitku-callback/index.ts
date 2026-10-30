@@ -3,7 +3,7 @@ import { jsonResponse, requiredEnv } from "../_shared/http.ts";
 import { dbInsert, dbRpc } from "../_shared/supabase-rest.ts";
 
 type CallbackApplyResult = {
-  outcome: "updated" | "already_paid" | "not_found" | "amount_mismatch";
+  outcome: "updated" | "already_paid" | "not_found" | "amount_mismatch" | "reference_mismatch";
   status?: string;
 };
 
@@ -78,6 +78,9 @@ Deno.serve(async (request: Request) => {
     }
     if (result.outcome === "amount_mismatch") {
       return jsonResponse({ success: false, error: "Callback amount mismatch" }, 400);
+    }
+    if (result.outcome === "reference_mismatch") {
+      return jsonResponse({ success: false, error: "Callback reference mismatch" }, 400);
     }
     if (result.outcome !== "updated" && result.outcome !== "already_paid") {
       throw new Error("Unexpected callback transaction result");
