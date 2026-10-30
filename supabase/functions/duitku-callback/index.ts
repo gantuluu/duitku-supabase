@@ -14,7 +14,7 @@ Deno.serve(async (request: Request) => {
 
   try {
     const contentType = request.headers.get("content-type") ?? "";
-    if (!/^application\\/x-www-form-urlencoded(?:\\s*;|$)/i.test(contentType)) {
+    if (!/^application\/x-www-form-urlencoded(?:\s*;|$)/i.test(contentType)) {
       return jsonResponse({ success: false, error: "Expected form-urlencoded callback" }, 415);
     }
 
@@ -24,7 +24,7 @@ Deno.serve(async (request: Request) => {
     const MAX_FIELD_NAME_LENGTH = 64;
     const MAX_FIELD_VALUE_LENGTH = 2048;
     const declaredLength = request.headers.get("content-length");
-    if (declaredLength !== null && (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) {
+    if (declaredLength !== null && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) {
       return jsonResponse({ success: false, error: "Callback body too large" }, 413);
     }
     if (!request.body) {
