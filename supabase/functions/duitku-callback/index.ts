@@ -48,8 +48,21 @@ Deno.serve(async (request: Request) => {
       return jsonResponse({ success: false, error: "Invalid callback fields" }, 400);
     }
 
-    const resultCode = String(payload.resultCode ?? "");
-    const nextStatus = resultCode === "00" ? "paid" : "failed";
+    const resultCode = String(payload.resultCode ?? "").trim();
+    const paymentCode = String(payload.paymentCode ?? "").trim().toUpperCase();
+    let nextStatus: "paid" | "failed";
+
+    if (resultCode === "00") {
+      nextStatus = "paid";
+    } else if (resultCode === "01" && paymentCode === "VC") {
+      // Duitku resultCode 01 is supported for Credit Card (VC) only.
+      nextStatus = "failed";
+    } else {
+      // Unknown/missing result codes, and 01 from non-credit-card channels,
+      // must never mutate payment or order state.
+      return jsonResponse({ success: false, error: "Unsupported callback result code or payment channel" }, 400);
+    }
+
     const result = await dbRpc<CallbackApplyResult>("apply_duitku_callback_status", {
       p_merchant_order_id: merchantOrderId,
       p_amount: amount,
