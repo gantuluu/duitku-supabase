@@ -56,13 +56,15 @@ The handler now enforces a 16 KiB streaming body limit before buffering/parsing,
 
 ### C-05 — Medium: raw callback payload is persisted without minimization
 
-**Location:** `supabase/functions/duitku-callback/index.ts`; `duitku_callback_logs.payload`
+**Status: Implemented in GitHub source; runtime verification pending.**
 
-The entire parsed callback payload is written to the database before signature and merchant validation. The POP callback schema can contain additional customer/payment metadata, and the current implementation does not redact or minimize it.
+The Edge Function now persists only an allowlist of fields needed for reconciliation: merchant code, amount, merchant order ID, provider reference, result code, and payment code. The submitted signature and arbitrary callback/customer metadata are excluded from both callback logs and the payload passed to the payment-state RPC.
 
-**Impact:** Untrusted requests can create log volume, and customer or payment-related metadata may be retained even when it is not required for reconciliation. This increases privacy and data-retention exposure.
+Logging failure behavior is explicit:
+- For a callback with a valid signature and merchant code, the minimal audit log must be stored before payment-state mutation. If the insert fails, processing returns HTTP 500 so Duitku can retry; no payment-state RPC is called.
+- For an invalid signature or merchant code, logging is best-effort. A logging failure does not mask the HTTP 401 response.
 
-**Recommendation:** Persist only an allowlist of fields needed for security investigation and reconciliation. Redact sensitive/optional values, apply retention rules, and consider whether invalid requests need full database logging at all. Keep audit logging failures from silently causing inconsistent payment processing; define a deliberate retry/failure policy.
+**Impact addressed:** Unneeded callback/customer metadata and the submitted signature are no longer retained in the JSON payload. Authenticated payment-state changes require successful audit-log persistence.
 
 ### C-06 — Low: constant-time comparison returns early when signature lengths differ
 
@@ -89,7 +91,8 @@ The entire parsed callback payload is written to the database before signature a
 - **C-02 — Implemented in source:** explicit result-code and payment-channel validation is performed in the Edge Function and independently enforced by the database RPC. `paymentCode = "VC"` is recorded in `duitku_payments.payment_method`.
 - **C-03 — Implemented in source:** the database RPC compares the callback reference with the stored invoice reference while holding the payment row lock. Missing or mismatched references return `reference_mismatch`; the Edge Function rejects this outcome without changing payment state.
 - **C-04 — Implemented in source:** streaming request-size, field-count, field-name/value length, duplicate-field, and UTF-8 validation is performed before database logging and callback processing.
-- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01 through C-04 as implemented in GitHub source, pending runtime verification.
+- **C-05 — Implemented in source:** callback logs and the payment RPC receive only a minimal allowlist; valid callbacks fail closed with HTTP 500 if audit persistence fails, while invalid callbacks retain HTTP 401 when best-effort logging fails.
+- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01 through C-05 as implemented in GitHub source, pending runtime verification.
 
 ## Remediation order
 
@@ -97,7 +100,7 @@ The entire parsed callback payload is written to the database before signature a
 2. **C-02:** Strictly validate result codes before state changes. — Implemented in source.
 3. **C-03:** Verify the callback provider reference against the stored invoice reference. — Implemented in source.
 4. **C-04:** Bound request size, field lengths, and duplicate fields. — Implemented in source.
-5. **C-05:** Minimize and redact callback logs; define logging failure behavior.
+5. **C-05:** Minimize and redact callback logs; define logging failure behavior. — Implemented in source.
 6. **C-06:** Enforce signature format and length before constant-time comparison.
 
 ## Sources
