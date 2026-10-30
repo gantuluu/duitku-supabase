@@ -28,7 +28,7 @@ function validateDuitkuInvoiceRequest(payload: DuitkuInvoiceRequest): void {
     value: unknown,
     field: string,
     maxLength: number,
-  ): asserts value is string => {
+  ): void => {
     if (
       typeof value !== "string" ||
       value.trim().length === 0 ||
