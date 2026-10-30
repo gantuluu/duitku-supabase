@@ -54,7 +54,7 @@ Callback result-code rules:
 - Missing, unknown, or unsupported result codes are rejected without changing payment or order status.
 - A `01` callback from any payment channel other than `VC` is rejected without changing payment or order status.
 
-The callback payment method code is saved in `duitku_payments.payment_method`. The callback `reference` must exactly match the non-empty Duitku invoice reference saved when the invoice was created; missing or mismatched references are rejected without changing payment state. The callback endpoint returns plain-text `OK` with HTTP 200 after successful processing.
+The callback payment method code is saved in `duitku_payments.payment_method`. The callback `reference` must exactly match the non-empty Duitku invoice reference saved when the invoice was created; missing or mismatched references are rejected without changing payment state. Only a minimal allowlist (merchant code, amount, merchant order ID, reference, result code, and payment code) is persisted for callback audit/reconciliation; the submitted signature and arbitrary callback metadata are not stored. A valid callback is not allowed to mutate payment state unless its minimal audit log has been stored successfully. Invalid signature/merchant callbacks return HTTP 401 even if best-effort logging fails. The callback endpoint returns plain-text `OK` with HTTP 200 after successful processing.
 
 ## 3. Read payment status
 
