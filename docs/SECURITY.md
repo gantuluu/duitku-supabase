@@ -31,7 +31,8 @@ Create payment-intent rows from a trusted backend. The migration intentionally c
 - Reject missing, unknown, or channel-incompatible result codes before any payment-state mutation.
 - Persist the callback `paymentCode` in `duitku_payments.payment_method` for reconciliation.
 - Require the callback `reference` to exactly match the non-empty invoice reference stored in `duitku_payments.duitku_reference`; reject missing or mismatched references before state mutation.
-- Keep callback logs for investigation.
+- Store only an allowlist in callback logs and `duitku_payments.callback_payload`: merchant code, amount, merchant order ID, provider reference, result code, and payment code. Never persist the submitted signature or arbitrary callback/customer metadata.
+- For authenticated callbacks, require the minimal audit-log insert to succeed before payment-state mutation; return HTTP 500 on logging failure so Duitku can retry. For invalid signature/merchant callbacks, attempt a minimal log best-effort but preserve the HTTP 401 response if logging fails.
 - Never use browser redirects or JavaScript callbacks to mark an order as paid.
 - Preserve paid as a terminal state; do not downgrade it on later callbacks.
 - Apply the payment and parent-order status changes through the `apply_duitku_callback_status` database function. It locks the payment row and commits both changes in one transaction.
