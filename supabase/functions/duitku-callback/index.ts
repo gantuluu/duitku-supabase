@@ -110,16 +110,41 @@ Deno.serve(async (request: Request) => {
     const signatureValid = constantTimeEqual(signature.toLowerCase(), expectedSignature);
     const merchantValid = merchantCode === expectedMerchantCode;
 
-    await dbInsert("duitku_callback_logs", {
-      merchant_order_id: merchantOrderId || null,
-      duitku_reference: String(payload.reference ?? "") || null,
-      signature_valid: signatureValid && merchantValid,
-      payload,
-    });
+    // Persist only the small allowlist needed for reconciliation. Never store
+    // the submitted signature or arbitrary provider/customer metadata.
+    const auditPayload = {
+      merchantCode,
+      amount,
+      merchantOrderId,
+      reference: String(payload.reference ?? ""),
+      resultCode: String(payload.resultCode ?? ""),
+      paymentCode: String(payload.paymentCode ?? ""),
+    };
 
     if (!signatureValid || !merchantValid) {
+      // Invalid callbacks are logged best-effort; logging failure must not
+      // change the authentication result returned to the untrusted sender.
+      try {
+        await dbInsert("duitku_callback_logs", {
+          merchant_order_id: merchantOrderId || null,
+          duitku_reference: auditPayload.reference || null,
+          signature_valid: false,
+          payload: auditPayload,
+        });
+      } catch {
+        // Do not expose database/logging details to an unauthenticated caller.
+      }
       return jsonResponse({ success: false, error: "Invalid callback signature or merchant code" }, 401);
     }
+
+    // For authenticated callbacks, audit persistence is required before any
+    // payment-state mutation. Failure returns 500 so Duitku can retry safely.
+    await dbInsert("duitku_callback_logs", {
+      merchant_order_id: merchantOrderId || null,
+      duitku_reference: auditPayload.reference || null,
+      signature_valid: true,
+      payload: auditPayload,
+    });
     if (!merchantOrderId || !/^\d+$/.test(amount)) {
       return jsonResponse({ success: false, error: "Invalid callback fields" }, 400);
     }
@@ -145,7 +170,7 @@ Deno.serve(async (request: Request) => {
       p_next_status: nextStatus,
       p_result_code: resultCode,
       p_result_message: String(payload.resultMessage ?? ""),
-      p_callback_payload: payload,
+      p_callback_payload: auditPayload,
       p_duitku_reference: String(payload.reference ?? ""),
     });
 
