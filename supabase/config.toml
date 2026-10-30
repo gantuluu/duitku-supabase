@@ -1,0 +1,10 @@
+project_id = "duitku-supabase"
+
+[functions.duitku-create]
+verify_jwt = true
+
+[functions.duitku-callback]
+verify_jwt = false
+
+[functions.duitku-status]
+verify_jwt = true
