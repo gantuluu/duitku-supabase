@@ -32,6 +32,16 @@ Success response:
 
 Before calling this endpoint, a trusted backend must create a row in `duitku_payment_orders`. Do not allow clients to insert or modify payment intent rows directly.
 
+The Create Invoice adapter validates the Duitku request before sending it:
+- `paymentAmount` must be a positive safe integer.
+- `merchantOrderId` must be non-empty and at most 50 characters.
+- `productDetails`, `email`, `callbackUrl`, and `returnUrl` must be non-empty and at most 255 characters.
+- `email` must have a basic valid email format.
+- `callbackUrl` and `returnUrl` must be valid HTTP or HTTPS URLs.
+- Optional `customerVaName` must be non-empty and at most 20 characters; optional `phoneNumber` must be at most 50 characters.
+
+Invalid values are rejected locally before any request is sent to Duitku. These checks do not change the endpoint request or response contract.
+
 ## 2. Duitku callback
 
 `POST /duitku-callback`
