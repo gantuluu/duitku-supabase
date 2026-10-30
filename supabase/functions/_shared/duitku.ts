@@ -51,7 +51,7 @@ function validateDuitkuInvoiceRequest(payload: DuitkuInvoiceRequest): void {
   requireString(payload.callbackUrl, "callbackUrl", 255);
   requireString(payload.returnUrl, "returnUrl", 255);
 
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(payload.email)) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
     throw new Error("Invalid Duitku field: email");
   }
 
