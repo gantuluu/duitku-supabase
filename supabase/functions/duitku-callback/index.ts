@@ -1,12 +1,10 @@
 import { constantTimeEqual, hmacSha256Hex } from "../_shared/signature.ts";
 import { jsonResponse, requiredEnv } from "../_shared/http.ts";
-import { dbInsert, dbPatch, dbSelect } from "../_shared/supabase-rest.ts";
+import { dbInsert, dbRpc } from "../_shared/supabase-rest.ts";
 
-type Payment = {
-  id: string;
-  order_id: string;
-  amount: number;
-  status: string;
+type CallbackApplyResult = {
+  outcome: "updated" | "already_paid" | "not_found" | "amount_mismatch";
+  status?: string;
 };
 
 Deno.serve(async (request: Request) => {
@@ -50,41 +48,26 @@ Deno.serve(async (request: Request) => {
       return jsonResponse({ success: false, error: "Invalid callback fields" }, 400);
     }
 
-    const query = new URLSearchParams({
-      select: "id,order_id,amount,status",
-      merchant_order_id: `eq.${merchantOrderId}`,
-      limit: "1",
+    const resultCode = String(payload.resultCode ?? "");
+    const nextStatus = resultCode === "00" ? "paid" : "failed";
+    const result = await dbRpc<CallbackApplyResult>("apply_duitku_callback_status", {
+      p_merchant_order_id: merchantOrderId,
+      p_amount: amount,
+      p_next_status: nextStatus,
+      p_result_code: resultCode,
+      p_result_message: String(payload.resultMessage ?? ""),
+      p_callback_payload: payload,
+      p_duitku_reference: String(payload.reference ?? ""),
     });
-    const rows = await dbSelect<Payment>("duitku_payments", query);
-    const payment = rows[0];
-    if (!payment) return jsonResponse({ success: false, error: "Payment not found" }, 404);
-    if (Number(amount) !== Number(payment.amount)) {
+
+    if (result.outcome === "not_found") {
+      return jsonResponse({ success: false, error: "Payment not found" }, 404);
+    }
+    if (result.outcome === "amount_mismatch") {
       return jsonResponse({ success: false, error: "Callback amount mismatch" }, 400);
     }
-
-    // A paid transaction is terminal; never downgrade it from a later callback.
-    if (payment.status !== "paid") {
-      const resultCode = String(payload.resultCode ?? "");
-      const nextStatus = resultCode === "00" ? "paid" : "failed";
-      const paymentUpdate = new URLSearchParams({
-        merchant_order_id: `eq.${merchantOrderId}`,
-        status: "neq.paid",
-      });
-      await dbPatch("duitku_payments", paymentUpdate, {
-        status: nextStatus,
-        result_code: resultCode,
-        result_message: String(payload.resultMessage ?? ""),
-        callback_payload: payload,
-        duitku_reference: String(payload.reference ?? "") || null,
-        paid_at: nextStatus === "paid" ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      });
-
-      const orderUpdate = new URLSearchParams({ id: `eq.${payment.order_id}` });
-      await dbPatch("duitku_payment_orders", orderUpdate, {
-        payment_status: nextStatus,
-        updated_at: new Date().toISOString(),
-      });
+    if (result.outcome !== "updated" && result.outcome !== "already_paid") {
+      throw new Error("Unexpected callback transaction result");
     }
 
     return new Response("OK", { status: 200, headers: { "content-type": "text/plain" } });
