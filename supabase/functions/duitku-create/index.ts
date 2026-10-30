@@ -18,6 +18,13 @@ type PaymentOrder = {
   payment_status: string;
 };
 
+type ExistingPayment = {
+  id: string;
+  merchant_order_id: string;
+  payment_url: string | null;
+  status: string;
+};
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") {
     return jsonResponse({ success: false, error: "Method not allowed" }, 405);
@@ -44,22 +51,49 @@ Deno.serve(async (request: Request) => {
     }
 
     const existingQuery = new URLSearchParams({
-      select: "merchant_order_id,payment_url,status",
+      select: "id,merchant_order_id,payment_url,status",
       order_id: `eq.${order.id}`,
       limit: "1",
     });
-    const existing = await dbSelect<Record<string, unknown>>("duitku_payments", existingQuery);
-    if (existing[0]?.status === "pending" && existing[0]?.payment_url) {
-      return jsonResponse({ success: true, data: existing[0] });
+    const existing = (await dbSelect<ExistingPayment>("duitku_payments", existingQuery))[0];
+
+    if (existing?.status === "pending" && existing.payment_url) {
+      return jsonResponse({
+        success: true,
+        data: {
+          merchantOrderId: existing.merchant_order_id,
+          paymentUrl: existing.payment_url,
+          status: "pending",
+        },
+      });
+    }
+    if (existing?.status === "pending") {
+      return jsonResponse({ success: false, error: "Payment invoice is still being initialized" }, 409);
     }
 
     const merchantOrderId = crypto.randomUUID();
-    await dbInsert("duitku_payments", {
-      order_id: order.id,
-      merchant_order_id: merchantOrderId,
-      amount: order.amount,
-      status: "pending",
-    });
+    if (existing) {
+      const resetQuery = new URLSearchParams({ id: `eq.${existing.id}` });
+      await dbPatch("duitku_payments", resetQuery, {
+        merchant_order_id: merchantOrderId,
+        duitku_reference: null,
+        payment_url: null,
+        amount: order.amount,
+        status: "pending",
+        result_code: null,
+        result_message: null,
+        callback_payload: null,
+        paid_at: null,
+        updated_at: new Date().toISOString(),
+      });
+    } else {
+      await dbInsert("duitku_payments", {
+        order_id: order.id,
+        merchant_order_id: merchantOrderId,
+        amount: order.amount,
+        status: "pending",
+      });
+    }
 
     try {
       const invoice = await createDuitkuInvoice({
