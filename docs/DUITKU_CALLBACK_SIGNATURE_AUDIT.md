@@ -38,13 +38,13 @@ The database RPC independently enforces the same result-code/channel mapping and
 
 ### C-03 — Medium: provider reference is not checked against the invoice reference stored at creation
 
-**Location:** `supabase/functions/duitku-callback/index.ts`
+**Status: Implemented in GitHub source; runtime verification pending.**
 
-The callback's `reference` is stored, but the handler does not compare it with the existing `duitku_payments.duitku_reference`.
+The callback transaction now requires both the stored invoice reference and callback reference to be non-empty and exactly equal. Missing or mismatched references return `reference_mismatch` before payment or order status changes. This comparison occurs under the same payment-row lock used by C-01.
 
-**Impact:** The callback is already protected by HMAC, merchant code, merchant order ID, and amount checks. However, not checking the provider reference removes an additional consistency check tying the callback to the invoice response originally recorded by this application.
+**Impact addressed:** A callback cannot update payment state using only a matching merchant order ID and amount when its provider invoice reference does not match the reference returned by Create Invoice.
 
-**Recommendation:** When an invoice reference is present in the database, require the callback reference to match it before applying a state transition. Handle missing reference only according to a confirmed Duitku callback contract.
+**Compatibility note:** This assumes Duitku sends the same `reference` value from Create Invoice in its callback. Confirm with a Sandbox callback before production.
 
 ### C-04 — Medium: callback request body and field count are not bounded
 
@@ -89,13 +89,14 @@ The entire parsed callback payload is written to the database before signature a
 
 - **C-01 — Implemented in source:** callback state changes run through `public.apply_duitku_callback_status`, a PostgreSQL function that locks the payment row with `FOR UPDATE` and updates payment and parent order in one transaction. The RPC is restricted to `service_role` and invoked from the callback Edge Function.
 - **C-02 — Implemented in source:** explicit result-code and payment-channel validation is performed in the Edge Function and independently enforced by the database RPC. `paymentCode = "VC"` is recorded in `duitku_payments.payment_method`.
-- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01 and C-02 as implemented in GitHub source, pending runtime verification.
+- **C-03 — Implemented in source:** the database RPC compares the callback reference with the stored invoice reference while holding the payment row lock. Missing or mismatched references return `reference_mismatch`; the Edge Function rejects this outcome without changing payment state.
+- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01, C-02, and C-03 as implemented in GitHub source, pending runtime verification.
 
 ## Remediation order
 
 1. **C-01:** Make payment and order status updates atomic and race-safe. — Implemented in source.
 2. **C-02:** Strictly validate result codes before state changes. — Implemented in source.
-3. **C-03:** Verify the callback provider reference against the stored invoice reference.
+3. **C-03:** Verify the callback provider reference against the stored invoice reference. — Implemented in source.
 4. **C-04:** Bound request size, field lengths, and duplicate fields.
 5. **C-05:** Minimize and redact callback logs; define logging failure behavior.
 6. **C-06:** Enforce signature format and length before constant-time comparison.
