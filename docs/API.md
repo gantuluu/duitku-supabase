@@ -48,7 +48,13 @@ Invalid values are rejected locally before any request is sent to Duitku. These 
 
 Public endpoint called by Duitku. Content type must be `application/x-www-form-urlencoded`. The handler validates merchant code, amount, merchant order ID, and HMAC-SHA256 signature before changing payment state.
 
-Duitku callback success is represented by `resultCode = "00"`. The endpoint returns plain-text `OK` with HTTP 200 after successful processing.
+Callback result-code rules:
+- `resultCode = "00"`: accepted as successful payment for all payment channels.
+- `resultCode = "01"`: accepted as failed only when `paymentCode = "VC"` (Credit Card: Visa, Mastercard, or JCB).
+- Missing, unknown, or unsupported result codes are rejected without changing payment or order status.
+- A `01` callback from any payment channel other than `VC` is rejected without changing payment or order status.
+
+The callback payment method code is saved in `duitku_payments.payment_method`. The callback endpoint returns plain-text `OK` with HTTP 200 after successful processing.
 
 ## 3. Read payment status
 
