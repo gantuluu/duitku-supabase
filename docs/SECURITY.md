@@ -22,6 +22,8 @@ Create payment-intent rows from a trusted backend. The migration intentionally c
 
 ## Callback validation
 
+- Reject callback bodies larger than 16 KiB before parsing; accept at most 32 form fields; cap field names at 64 characters and values at 2,048 characters, with stricter per-field limits for known fields.
+- Reject duplicate form field names and invalid UTF-8 before processing the callback.
 - Verify the exact HMAC-SHA256 formula from Duitku POP documentation.
 - Verify merchant code and amount against the stored payment.
 - Accept `resultCode = "00"` as successful payment for all channels.
