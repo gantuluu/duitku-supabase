@@ -14,12 +14,88 @@ Deno.serve(async (request: Request) => {
 
   try {
     const contentType = request.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/x-www-form-urlencoded")) {
+    if (!/^application\\/x-www-form-urlencoded(?:\\s*;|$)/i.test(contentType)) {
       return jsonResponse({ success: false, error: "Expected form-urlencoded callback" }, 415);
     }
 
-    const form = await request.formData();
-    const payload = Object.fromEntries(form.entries());
+    // Bound the stream before buffering or parsing attacker-controlled input.
+    const MAX_BODY_BYTES = 16 * 1024;
+    const MAX_FIELDS = 32;
+    const MAX_FIELD_NAME_LENGTH = 64;
+    const MAX_FIELD_VALUE_LENGTH = 2048;
+    const declaredLength = request.headers.get("content-length");
+    if (declaredLength !== null && (!/^\\d+$/.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) {
+      return jsonResponse({ success: false, error: "Callback body too large" }, 413);
+    }
+    if (!request.body) {
+      return jsonResponse({ success: false, error: "Callback body is empty" }, 400);
+    }
+
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return jsonResponse({ success: false, error: "Callback body too large" }, 413);
+      }
+      chunks.push(value);
+    }
+
+    const bodyBytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bodyBytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    let encodedBody: string;
+    try {
+      encodedBody = new TextDecoder("utf-8", { fatal: true }).decode(bodyBytes);
+    } catch {
+      return jsonResponse({ success: false, error: "Callback body is not valid UTF-8" }, 400);
+    }
+
+    const form = new URLSearchParams(encodedBody);
+    const entries = [...form.entries()];
+    if (entries.length === 0 || entries.length > MAX_FIELDS) {
+      return jsonResponse({ success: false, error: "Invalid callback field count" }, 400);
+    }
+
+    const payload: Record<string, string> = Object.create(null);
+    for (const [key, value] of entries) {
+      if (
+        key.length === 0 ||
+        key.length > MAX_FIELD_NAME_LENGTH ||
+        value.length > MAX_FIELD_VALUE_LENGTH
+      ) {
+        return jsonResponse({ success: false, error: "Callback field exceeds allowed length" }, 400);
+      }
+      if (Object.hasOwn(payload, key)) {
+        return jsonResponse({ success: false, error: "Duplicate callback field" }, 400);
+      }
+      payload[key] = value;
+    }
+
+    const fieldLimits: Record<string, number> = {
+      merchantCode: 50,
+      amount: 20,
+      merchantOrderId: 50,
+      signature: 64,
+      resultCode: 2,
+      resultMessage: 255,
+      paymentCode: 20,
+      reference: 100,
+    };
+    for (const [key, maxLength] of Object.entries(fieldLimits)) {
+      const value = payload[key];
+      if (value !== undefined && value.length > maxLength) {
+        return jsonResponse({ success: false, error: "Invalid callback field length" }, 400);
+      }
+    }
     const merchantCode = String(payload.merchantCode ?? "");
     const amount = String(payload.amount ?? "");
     const merchantOrderId = String(payload.merchantOrderId ?? "");
