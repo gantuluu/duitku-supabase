@@ -24,6 +24,10 @@ Create payment-intent rows from a trusted backend. The migration intentionally c
 
 - Verify the exact HMAC-SHA256 formula from Duitku POP documentation.
 - Verify merchant code and amount against the stored payment.
+- Accept `resultCode = "00"` as successful payment for all channels.
+- Accept `resultCode = "01"` as failed only for Credit Card channel `paymentCode = "VC"`.
+- Reject missing, unknown, or channel-incompatible result codes before any payment-state mutation.
+- Persist the callback `paymentCode` in `duitku_payments.payment_method` for reconciliation.
 - Keep callback logs for investigation.
 - Never use browser redirects or JavaScript callbacks to mark an order as paid.
 - Preserve paid as a terminal state; do not downgrade it on later callbacks.
