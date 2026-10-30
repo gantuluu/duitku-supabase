@@ -46,7 +46,7 @@ Invalid values are rejected locally before any request is sent to Duitku. These 
 
 `POST /duitku-callback`
 
-Public endpoint called by Duitku. Content type must be `application/x-www-form-urlencoded`. The handler validates merchant code, amount, merchant order ID, and HMAC-SHA256 signature before changing payment state.
+Public endpoint called by Duitku. Content type must be `application/x-www-form-urlencoded`. The handler limits the body to 16 KiB, accepts at most 32 fields, limits field names to 64 characters and values to 2,048 characters, applies stricter limits to known callback fields, and rejects duplicate field names before validation. It then validates merchant code, amount, merchant order ID, and HMAC-SHA256 signature before changing payment state.
 
 Callback result-code rules:
 - `resultCode = "00"`: accepted as successful payment for all payment channels.
