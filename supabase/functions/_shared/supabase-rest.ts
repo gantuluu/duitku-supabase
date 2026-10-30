@@ -52,6 +52,21 @@ export async function dbPatch<T>(
   return await response.json() as T[];
 }
 
+export async function dbRpc<T>(
+  functionName: string,
+  value: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(restUrl(`rpc/${encodeURIComponent(functionName)}`), {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(value),
+  });
+  if (!response.ok) {
+    throw new Error(`Database RPC failed (${response.status})`);
+  }
+  return await response.json() as T;
+}
+
 export async function getAuthenticatedUserId(request: Request): Promise<string> {
   const authorization = request.headers.get("authorization");
   if (!authorization) throw new Error("Missing user authorization");
