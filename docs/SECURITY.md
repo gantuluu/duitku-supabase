@@ -28,6 +28,7 @@ Create payment-intent rows from a trusted backend. The migration intentionally c
 - Accept `resultCode = "01"` as failed only for Credit Card channel `paymentCode = "VC"`.
 - Reject missing, unknown, or channel-incompatible result codes before any payment-state mutation.
 - Persist the callback `paymentCode` in `duitku_payments.payment_method` for reconciliation.
+- Require the callback `reference` to exactly match the non-empty invoice reference stored in `duitku_payments.duitku_reference`; reject missing or mismatched references before state mutation.
 - Keep callback logs for investigation.
 - Never use browser redirects or JavaScript callbacks to mark an order as paid.
 - Preserve paid as a terminal state; do not downgrade it on later callbacks.
