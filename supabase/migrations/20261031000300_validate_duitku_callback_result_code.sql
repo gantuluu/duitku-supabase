@@ -22,6 +22,7 @@ declare
   v_amount bigint;
   v_status text;
   v_payment_code text;
+  v_stored_reference text;
 begin
   v_payment_code := pg_catalog.upper(
     coalesce(p_callback_payload ->> 'paymentCode', '')
@@ -43,8 +44,8 @@ begin
     raise exception 'Unsupported Duitku callback result code or payment channel';
   end if;
 
-  select payment.id, payment.order_id, payment.amount, payment.status
-    into v_payment_id, v_order_id, v_amount, v_status
+  select payment.id, payment.order_id, payment.amount, payment.status, payment.duitku_reference
+    into v_payment_id, v_order_id, v_amount, v_status, v_stored_reference
   from public.duitku_payments as payment
   where payment.merchant_order_id = p_merchant_order_id
   for update;
@@ -55,6 +56,14 @@ begin
 
   if v_amount <> p_amount then
     return jsonb_build_object('outcome', 'amount_mismatch');
+  end if;
+
+  -- Both references must exist and match the invoice response saved at creation.
+  -- A missing stored reference is not accepted as a valid callback association.
+  if nullif(pg_catalog.btrim(coalesce(v_stored_reference, '')), '') is null
+    or nullif(pg_catalog.btrim(coalesce(p_duitku_reference, '')), '') is null
+    or v_stored_reference <> p_duitku_reference then
+    return jsonb_build_object('outcome', 'reference_mismatch');
   end if;
 
   -- Paid is terminal. A later callback must not downgrade either row.
