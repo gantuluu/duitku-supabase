@@ -87,6 +87,11 @@ The entire parsed callback payload is written to the database before signature a
 - The code avoids downgrading a payment row already observed as `paid` in the ordinary sequential path.
 - Callback logs, payments, and orders have RLS enabled and no client-facing policies in the migration.
 
+## Remediation status
+
+- **C-01 — Implemented in source:** callback state changes now run through `public.apply_duitku_callback_status`, a PostgreSQL function that locks the payment row with `FOR UPDATE` and updates payment and parent order in one transaction. The RPC is restricted to `service_role` and invoked from the callback Edge Function.
+- **Verification limitation:** source files were fetched again after commit, but the migration was not applied to a Supabase project and no concurrent callback/database integration test was run. Treat C-01 as implemented in GitHub source, pending runtime verification.
+
 ## Remediation order
 
 1. **C-01:** Make payment and order status updates atomic and race-safe.
