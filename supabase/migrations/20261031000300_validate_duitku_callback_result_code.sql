@@ -24,7 +24,7 @@ declare
   v_payment_code text;
 begin
   v_payment_code := pg_catalog.upper(
-    pg_catalog.coalesce(p_callback_payload ->> 'paymentCode', '')
+    coalesce(p_callback_payload ->> 'paymentCode', '')
   );
 
   if p_next_status is null then
