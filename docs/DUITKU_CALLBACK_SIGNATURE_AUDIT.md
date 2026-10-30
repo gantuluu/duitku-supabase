@@ -48,13 +48,11 @@ The callback transaction now requires both the stored invoice reference and call
 
 ### C-04 — Medium: callback request body and field count are not bounded
 
-**Location:** `supabase/functions/duitku-callback/index.ts`
+**Status: Implemented in GitHub source; runtime verification pending.**
 
-The handler calls `request.formData()` without checking the body size or limiting the number and length of fields. It also converts all form entries into an object without explicitly rejecting duplicate field names.
+The handler now enforces a 16 KiB streaming body limit before buffering/parsing, a maximum of 32 fields, a 64-character field-name limit, a 2,048-character general field-value limit, and stricter limits for known callback fields. It rejects duplicate field names and invalid UTF-8 before signature processing.
 
-**Impact:** The public endpoint can be exposed to unnecessarily large form submissions and excess parsing/database work. Duplicate fields can create ambiguous parsing behavior.
-
-**Recommendation:** Enforce a reasonable request-body size limit before parsing; reject duplicate security-relevant fields; validate required field lengths and formats; and only retain the callback fields the application actually needs.
+**Impact addressed:** Oversized bodies, excessive field counts, overlong fields, and ambiguous duplicate fields are rejected before database logging or payment-state processing.
 
 ### C-05 — Medium: raw callback payload is persisted without minimization
 
@@ -90,14 +88,15 @@ The entire parsed callback payload is written to the database before signature a
 - **C-01 — Implemented in source:** callback state changes run through `public.apply_duitku_callback_status`, a PostgreSQL function that locks the payment row with `FOR UPDATE` and updates payment and parent order in one transaction. The RPC is restricted to `service_role` and invoked from the callback Edge Function.
 - **C-02 — Implemented in source:** explicit result-code and payment-channel validation is performed in the Edge Function and independently enforced by the database RPC. `paymentCode = "VC"` is recorded in `duitku_payments.payment_method`.
 - **C-03 — Implemented in source:** the database RPC compares the callback reference with the stored invoice reference while holding the payment row lock. Missing or mismatched references return `reference_mismatch`; the Edge Function rejects this outcome without changing payment state.
-- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01, C-02, and C-03 as implemented in GitHub source, pending runtime verification.
+- **C-04 — Implemented in source:** streaming request-size, field-count, field-name/value length, duplicate-field, and UTF-8 validation is performed before database logging and callback processing.
+- **Verification limitation:** source files were fetched again after commit, but migrations were not applied to a Supabase project and no Deno, database integration, or callback concurrency tests were run. Treat C-01 through C-04 as implemented in GitHub source, pending runtime verification.
 
 ## Remediation order
 
 1. **C-01:** Make payment and order status updates atomic and race-safe. — Implemented in source.
 2. **C-02:** Strictly validate result codes before state changes. — Implemented in source.
 3. **C-03:** Verify the callback provider reference against the stored invoice reference. — Implemented in source.
-4. **C-04:** Bound request size, field lengths, and duplicate fields.
+4. **C-04:** Bound request size, field lengths, and duplicate fields. — Implemented in source.
 5. **C-05:** Minimize and redact callback logs; define logging failure behavior.
 6. **C-06:** Enforce signature format and length before constant-time comparison.
 
